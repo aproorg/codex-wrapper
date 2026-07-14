@@ -88,14 +88,10 @@ TLS-1.3-capable `python3`. Other knobs: `SHIM_PORT` (default `8787`),
 
 ## Profiles
 
-Switch models with `codex --profile <name>` (default model: `gpt-5.4`):
+Switch models with `codex --profile <name>` (default model: `gpt-5.6-sol`):
 
 | Profile | Model |
 |---|---|
-| `gpt5` | gpt-5.4 |
-| `gpt5-pro` | gpt-5.4-pro |
-| `o3` | o3 |
-| `o4-mini` | o4-mini |
 | `gpt56-sol` | gpt-5.6-sol |
 | `gpt56-terra` | gpt-5.6-terra |
 | `gpt56-luna` | gpt-5.6-luna |

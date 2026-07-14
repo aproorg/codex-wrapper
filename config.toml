@@ -2,7 +2,7 @@
 # Mirrors the Claude Code setup: all traffic goes through https://litellm.ai.apro.is
 # The proxy REQUIRES the x-github-repo header on every request (set under http_headers).
 
-model = "gpt-5.4"
+model = "gpt-5.6-sol"
 model_provider = "litellm"
 personality = "pragmatic"
 model_reasoning_effort = "high"
@@ -26,22 +26,6 @@ env_key = "LITELLM_API_KEY"
 "x-github-repo" = "CODEX_GITHUB_REPO"
 
 # ---- Convenience profiles: switch with `codex --profile <name>` ----
-[profiles.gpt5]
-model = "gpt-5.4"
-model_provider = "litellm"
-
-[profiles.gpt5-pro]
-model = "gpt-5.4-pro"
-model_provider = "litellm"
-
-[profiles.o3]
-model = "o3"
-model_provider = "litellm"
-
-[profiles.o4-mini]
-model = "o4-mini"
-model_provider = "litellm"
-
 [profiles.gpt56-sol]
 model = "gpt-5.6-sol"
 model_provider = "litellm"
@@ -61,9 +45,6 @@ model_provider = "litellm"
 [tui]
 status_line = ["model-with-reasoning", "current-dir"]
 status_line_use_colors = true
-
-[tui.model_availability_nux]
-"gpt-5.5" = 4
 
 # ---- MCP servers via the LiteLLM gateway (mirrors the Claude Code setup) ----
 # Routed through the local shim (litellm_shim.py on :8787) for the same reason
