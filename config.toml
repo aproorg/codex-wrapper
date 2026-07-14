@@ -1,0 +1,87 @@
+# Codex CLI -> LiteLLM (apro) proxy
+# Mirrors the Claude Code setup: all traffic goes through https://litellm.ai.apro.is
+# The proxy REQUIRES the x-github-repo header on every request (set under http_headers).
+
+model = "gpt-5.4"
+model_provider = "litellm"
+personality = "pragmatic"
+model_reasoning_effort = "high"
+service_tier = "default"
+approvals_reviewer = "user"
+
+[model_providers.litellm]
+name = "LiteLLM (apro)"
+# Points at the local HTTP/1.1 shim (litellm_shim.py), which forwards to
+# https://litellm.ai.apro.is over a working TLS stack and injects the required
+# x-github-repo header. Codex's native-tls build can't reach the proxy directly.
+base_url = "http://127.0.0.1:8787/v1"
+# Codex 0.137+ only supports the Responses API (Chat Completions was removed).
+wire_api = "responses"
+# Codex reads the API key from this env var at runtime (the LiteLLM virtual key).
+env_key = "LITELLM_API_KEY"
+
+# Per-repo attribution: the codex wrapper sets CODEX_GITHUB_REPO from the cwd's
+# git remote (same detect_github_repo as the claude wrapper); the shim forwards it.
+[model_providers.litellm.env_http_headers]
+"x-github-repo" = "CODEX_GITHUB_REPO"
+
+# ---- Convenience profiles: switch with `codex --profile <name>` ----
+[profiles.gpt5]
+model = "gpt-5.4"
+model_provider = "litellm"
+
+[profiles.gpt5-pro]
+model = "gpt-5.4-pro"
+model_provider = "litellm"
+
+[profiles.o3]
+model = "o3"
+model_provider = "litellm"
+
+[profiles.o4-mini]
+model = "o4-mini"
+model_provider = "litellm"
+
+[profiles.gpt56-sol]
+model = "gpt-5.6-sol"
+model_provider = "litellm"
+
+[profiles.gpt56-terra]
+model = "gpt-5.6-terra"
+model_provider = "litellm"
+
+[profiles.gpt56-luna]
+model = "gpt-5.6-luna"
+model_provider = "litellm"
+
+# NOTE: per-user directory trust lives in each user's local ~/.codex/config.toml,
+# NOT here. Codex prompts to trust a directory on first run; that writes a
+# [projects."<path>"] block locally. Do not ship personal paths in the shared file.
+
+[tui]
+status_line = ["model-with-reasoning", "current-dir"]
+status_line_use_colors = true
+
+[tui.model_availability_nux]
+"gpt-5.5" = 4
+
+# ---- MCP servers via the LiteLLM gateway (mirrors the Claude Code setup) ----
+# Routed through the local shim (litellm_shim.py on :8787) for the same reason
+# the model traffic is: Codex's native-tls can't reach litellm.ai.apro.is
+# directly. The shim forwards Authorization + x-mcp-servers upstream. The
+# x-mcp-servers header tells LiteLLM which backend MCP server to route to.
+[mcp_servers.firecrawl]
+url = "http://127.0.0.1:8787/mcp/"
+bearer_token_env_var = "LITELLM_API_KEY"
+http_headers = { "x-mcp-servers" = "Firecrawl" }
+
+[mcp_servers.firecrawl.tools.Firecrawl-firecrawl_scrape]
+approval_mode = "approve"
+
+[mcp_servers.firecrawl.tools.Firecrawl-firecrawl_agent]
+approval_mode = "approve"
+
+[mcp_servers.searxng]
+url = "http://127.0.0.1:8787/mcp/"
+bearer_token_env_var = "LITELLM_API_KEY"
+http_headers = { "x-mcp-servers" = "Searxng" }
