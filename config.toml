@@ -1,6 +1,7 @@
 # Codex CLI -> LiteLLM (apro) proxy
 # Mirrors the Claude Code setup: all traffic goes through https://litellm.ai.apro.is
-# The proxy REQUIRES the x-github-repo header on every request (set under http_headers).
+# The proxy REQUIRES the x-github-repo header on every request (set under
+# env_http_headers below; the codex wrapper exports CODEX_GITHUB_REPO).
 
 model = "gpt-5.6-sol"
 model_provider = "litellm"
@@ -11,17 +12,14 @@ approvals_reviewer = "user"
 
 [model_providers.litellm]
 name = "LiteLLM (apro)"
-# Points at the local HTTP/1.1 shim (litellm_shim.py), which forwards to
-# https://litellm.ai.apro.is over a working TLS stack and injects the required
-# x-github-repo header. Codex's native-tls build can't reach the proxy directly.
-base_url = "http://127.0.0.1:8787/v1"
+base_url = "https://litellm.ai.apro.is/v1"
 # Codex 0.137+ only supports the Responses API (Chat Completions was removed).
 wire_api = "responses"
 # Codex reads the API key from this env var at runtime (the LiteLLM virtual key).
 env_key = "LITELLM_API_KEY"
 
 # Per-repo attribution: the codex wrapper sets CODEX_GITHUB_REPO from the cwd's
-# git remote (same detect_github_repo as the claude wrapper); the shim forwards it.
+# git remote (same detect_github_repo as the claude wrapper).
 [model_providers.litellm.env_http_headers]
 "x-github-repo" = "CODEX_GITHUB_REPO"
 
@@ -47,12 +45,9 @@ status_line = ["model-with-reasoning", "current-dir"]
 status_line_use_colors = true
 
 # ---- MCP servers via the LiteLLM gateway (mirrors the Claude Code setup) ----
-# Routed through the local shim (litellm_shim.py on :8787) for the same reason
-# the model traffic is: Codex's native-tls can't reach litellm.ai.apro.is
-# directly. The shim forwards Authorization + x-mcp-servers upstream. The
-# x-mcp-servers header tells LiteLLM which backend MCP server to route to.
+# The x-mcp-servers header tells LiteLLM which backend MCP server to route to.
 [mcp_servers.firecrawl]
-url = "http://127.0.0.1:8787/mcp/"
+url = "https://litellm.ai.apro.is/mcp/"
 bearer_token_env_var = "LITELLM_API_KEY"
 http_headers = { "x-mcp-servers" = "Firecrawl" }
 
@@ -63,6 +58,6 @@ approval_mode = "approve"
 approval_mode = "approve"
 
 [mcp_servers.searxng]
-url = "http://127.0.0.1:8787/mcp/"
+url = "https://litellm.ai.apro.is/mcp/"
 bearer_token_env_var = "LITELLM_API_KEY"
 http_headers = { "x-mcp-servers" = "Searxng" }

@@ -4,8 +4,8 @@
 # claudestart.ps1 mirrors claude-env.sh: it resolves the LiteLLM key from
 # 1Password (same item, same local.env, same key cache as the claude
 # wrapper), detects the current GitHub repo for the x-github-repo header,
-# ensures the local TLS shim (litellm_shim.py) is running, and launches the
-# real `codex` with LITELLM_API_KEY + CODEX_GITHUB_REPO exported.
+# and launches the real `codex` with LITELLM_API_KEY + CODEX_GITHUB_REPO
+# exported.
 #
 # Install:  irm https://raw.githubusercontent.com/aproorg/codex-wrapper/main/install.ps1 | iex
 # Update:   Remove-Item "$env:LOCALAPPDATA\claude\env-remote.sh"
@@ -20,11 +20,6 @@ $OP_Field = "API Key"
 
 $CacheTTL_Seconds = 43200  # 12 hours for API keys
 $ConfigTTL_Seconds = 300   # 5 minutes for remote config
-
-# Codex-specific
-$ShimScript = "$env:USERPROFILE\.codex\litellm_shim.py"
-$ShimPort = if ($env:SHIM_PORT) { [int]$env:SHIM_PORT } else { 8787 }
-$ShimPython = if ($env:SHIM_PYTHON) { $env:SHIM_PYTHON } else { "python" }
 
 # ============================================================================
 # Cache directory — deliberately SHARED with the claude wrapper so keys and
@@ -257,44 +252,33 @@ function Get-ApiKey {
 }
 
 # ============================================================================
-# TLS shim management (codex-specific)
+# CA bundle (codex-specific)
 # ============================================================================
-function Test-ShimPort {
-    $tcp = New-Object System.Net.Sockets.TcpClient
-    try {
-        $tcp.Connect("127.0.0.1", $ShimPort)
-        return $true
-    } catch {
-        return $false
-    } finally {
-        $tcp.Dispose()
+# On macOS, Codex (rustls) fails to reach the proxy when it verifies through the
+# platform verifier, and must be pointed at a PEM bundle via
+# CODEX_CA_CERTIFICATE. On Windows we deliberately do NOT probe for a bundle:
+# the Windows system root store is a different implementation that is expected
+# to work, and it is also where corporate/MDM CAs live — pinning a static
+# bundle here could break a machine behind a TLS-inspecting proxy.
+#
+# So we only honour an explicit override. If Codex on Windows turns out to hit
+# the same defect ("Connection failed: error sending request"), set:
+#   $env:CODEX_CA_CERTIFICATE = "C:\path\to\ca-bundle.crt"
+# Git for Windows ships one at <git>\mingw64\etc\ssl\certs\ca-bundle.crt.
+function Set-CodexCaBundle {
+    if ($env:CODEX_CA_CERTIFICATE) {
+        if (-not (Test-Path -LiteralPath $env:CODEX_CA_CERTIFICATE)) {
+            [Console]::Error.WriteLine("Warning: CODEX_CA_CERTIFICATE does not exist: $env:CODEX_CA_CERTIFICATE")
+        }
+        return
     }
-}
-
-function Ensure-Shim {
-    if (Test-ShimPort) { return }
-
-    if (-not (Get-Command $ShimPython -ErrorAction SilentlyContinue)) {
-        [Console]::Error.WriteLine("ERROR: '$ShimPython' not found — install Python 3 (winget install Python.Python.3.12) or set `$env:SHIM_PYTHON")
-        exit 1
+    if ($env:SSL_CERT_FILE) {
+        if (Test-Path -LiteralPath $env:SSL_CERT_FILE) {
+            $env:CODEX_CA_CERTIFICATE = $env:SSL_CERT_FILE
+            return
+        }
+        [Console]::Error.WriteLine("Warning: SSL_CERT_FILE does not exist: $env:SSL_CERT_FILE")
     }
-    if (-not (Test-Path $ShimScript)) {
-        [Console]::Error.WriteLine("ERROR: $ShimScript not found — re-run install.ps1")
-        exit 1
-    }
-
-    $logDir = $CacheDir
-    Start-Process -FilePath $ShimPython -ArgumentList "`"$ShimScript`"" `
-        -WindowStyle Hidden `
-        -RedirectStandardError (Join-Path $logDir "codex-shim.log") `
-        -RedirectStandardOutput (Join-Path $logDir "codex-shim.out.log")
-
-    for ($i = 0; $i -lt 30; $i++) {
-        if (Test-ShimPort) { return }
-        Start-Sleep -Milliseconds 100
-    }
-    [Console]::Error.WriteLine("ERROR: shim did not come up on 127.0.0.1:$ShimPort — check $logDir\codex-shim.log")
-    exit 1
 }
 
 # ============================================================================
@@ -311,11 +295,12 @@ if (-not $env:LITELLM_API_KEY) {
 $githubRepo = Get-GitHubRepo
 $env:CODEX_GITHUB_REPO = if ($githubRepo) { $githubRepo } else { "aproorg/code" }
 
-if ($env:CLAUDE_DEBUG -eq "1") {
-    [Console]::Error.WriteLine("Codex: project=$Project repo=$($env:CODEX_GITHUB_REPO) shim=127.0.0.1:$ShimPort")
-}
+Set-CodexCaBundle
 
-Ensure-Shim
+if ($env:CLAUDE_DEBUG -eq "1") {
+    $caDesc = if ($env:CODEX_CA_CERTIFICATE) { $env:CODEX_CA_CERTIFICATE } else { "<system roots>" }
+    [Console]::Error.WriteLine("Codex: project=$Project repo=$($env:CODEX_GITHUB_REPO) ca=$caDesc")
+}
 
 # Launch the real Codex CLI (pass through any arguments)
 & codex @args
