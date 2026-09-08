@@ -6,8 +6,8 @@
 #   cd codex-wrapper && ./install.sh
 #
 # What it does:
-#   1. Checks prerequisites (real codex binary, TLS-1.3 python3, op, curl)
-#   2. Copies litellm_shim.py + config.toml into ~/.codex/
+#   1. Checks prerequisites (real codex binary, op, curl)
+#   2. Copies config.toml into ~/.codex/
 #      (an existing config.toml is backed up to config.toml.bak and its
 #      per-user [projects] trust blocks are carried over)
 #   3. Symlinks the `codex` wrapper into ~/.local/bin/codex so it shadows
@@ -36,8 +36,6 @@ REPO_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="$HOME/.local/bin"
 CODEX_DIR="$HOME/.codex"
 WRAPPER_LINK="$BIN_DIR/codex"
-SHIM_PYTHON="${SHIM_PYTHON:-/opt/homebrew/bin/python3}"
-SHIM_PORT="${SHIM_PORT:-8787}"
 
 # Portable realpath (macOS lacks readlink -f). Mirrors the wrapper's helper.
 _realpath() {
@@ -77,16 +75,6 @@ check_prerequisites() {
   [[ -n "$REAL_CODEX" ]] || die "Codex CLI not found on PATH. Install it first: brew install codex"
   info "Real codex binary: $REAL_CODEX"
 
-  if [[ -x "$SHIM_PYTHON" ]]; then
-    if "$SHIM_PYTHON" -c 'import ssl; raise SystemExit(0 if ssl.HAS_TLSv1_3 else 1)' 2>/dev/null; then
-      ok "TLS 1.3 python3 found at $SHIM_PYTHON"
-    else
-      die "$SHIM_PYTHON lacks TLS 1.3 support — the shim needs it to reach the proxy. brew install python"
-    fi
-  else
-    die "python3 not found at $SHIM_PYTHON — brew install python, or point SHIM_PYTHON at a TLS-1.3 python3 and re-run"
-  fi
-
   if have op; then
     if op whoami --account aproorg.1password.eu >/dev/null 2>&1; then
       ok "1Password CLI signed in (aproorg.1password.eu)"
@@ -105,12 +93,9 @@ check_prerequisites() {
   fi
 }
 
-# ── ~/.codex: shim + shared config ───────────────────────────────────────────
+# ── ~/.codex: shared config ──────────────────────────────────────────────────
 install_codex_dir() {
   mkdir -p "$CODEX_DIR"
-
-  cp "$REPO_DIR/litellm_shim.py" "$CODEX_DIR/litellm_shim.py"
-  ok "Installed $CODEX_DIR/litellm_shim.py"
 
   local target="$CODEX_DIR/config.toml"
   if [[ -f "$target" ]]; then
@@ -184,10 +169,14 @@ main() {
   install_wrapper
   check_path_order
 
-  # A shim from a previous install may still be running with old code.
-  if (exec 3<>"/dev/tcp/127.0.0.1/$SHIM_PORT") 2>/dev/null; then
-    warn "A shim is already running on 127.0.0.1:$SHIM_PORT — restart it to pick up the new version:"
-    warn "  kill \$(lsof -ti tcp:$SHIM_PORT) ; the wrapper relaunches it on next run"
+  # Older installs ran a local TLS shim on :8787; it is no longer used.
+  if (exec 3<>"/dev/tcp/127.0.0.1/8787") 2>/dev/null; then
+    warn "A leftover TLS shim is still listening on 127.0.0.1:8787 — it is no longer needed:"
+    warn "  kill \$(lsof -ti tcp:8787)"
+  fi
+  if [[ -f "$CODEX_DIR/litellm_shim.py" ]]; then
+    rm -f "$CODEX_DIR/litellm_shim.py"
+    info "Removed the obsolete $CODEX_DIR/litellm_shim.py"
   fi
 
   echo >&2
@@ -196,11 +185,10 @@ main() {
 
   Quick test:
     which codex          # should show $WRAPPER_LINK
-    codex exec "say hi"  # goes through the shim to litellm.ai.apro.is
+    codex exec "say hi"  # talks straight to litellm.ai.apro.is
 
   Debug:
-    CLAUDE_DEBUG=1 codex          # verbose auth/env resolution
-    tail -f ~/.cache/codex-shim.log
+    CLAUDE_DEBUG=1 codex               # verbose auth/env/CA resolution
     rm ~/.cache/claude/env-remote.sh   # force refetch of shared auth config
 
 EOF

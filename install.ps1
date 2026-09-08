@@ -33,21 +33,6 @@ function Check-Prerequisites {
     if (-not (Have 'codex')) {
         Write-Err "Codex CLI not found on PATH. Install it first: npm install -g @openai/codex"
     }
-    $python = if ($env:SHIM_PYTHON) { $env:SHIM_PYTHON } else { "python" }
-    if (Have $python) {
-        try {
-            & $python -c "import ssl; raise SystemExit(0 if ssl.HAS_TLSv1_3 else 1)" 2>$null
-            if ($LASTEXITCODE -eq 0) {
-                Write-Ok "TLS 1.3 Python found ($python)"
-            } else {
-                Write-Err "'$python' lacks TLS 1.3 support — the shim needs it. Install: winget install Python.Python.3.12"
-            }
-        } catch {
-            Write-Err "Could not run '$python' — check your Python install"
-        }
-    } else {
-        Write-Err "Python 3 not found — the TLS shim needs it. Install: winget install Python.Python.3.12 (or set `$env:SHIM_PYTHON)"
-    }
     if (-not (Have 'op')) {
         Write-Warn "1Password CLI (op) not found — API key management will not work."
         Write-Warn "Install: https://developer.1password.com/docs/cli/get-started/"
@@ -77,11 +62,16 @@ function Fetch-File($name, $dest) {
     Write-Ok "Wrote $dest"
 }
 
-# ── ~/.codex: shim + shared config ──────────────────────────────────────────
+# ── ~/.codex: shared config ─────────────────────────────────────────────────
 function Install-CodexDir {
     if (-not (Test-Path $CodexDir)) { New-Item -ItemType Directory -Path $CodexDir -Force | Out-Null }
 
-    Fetch-File "litellm_shim.py" "$CodexDir\litellm_shim.py"
+    # Older installs ran a local TLS shim; Codex now talks to the proxy directly.
+    $oldShim = "$CodexDir\litellm_shim.py"
+    if (Test-Path $oldShim) {
+        Remove-Item $oldShim -Force -ErrorAction SilentlyContinue
+        Write-Info "Removed the obsolete $oldShim"
+    }
 
     $target = "$CodexDir\config.toml"
     if (Test-Path $target) {
@@ -140,13 +130,17 @@ Write-Ok "Installation complete!"
 Write-Host @"
 
   The codexstart command launches Codex CLI with team config
-  (LiteLLM key from 1Password, x-github-repo attribution, local TLS shim).
+  (LiteLLM key from 1Password, x-github-repo attribution).
 
   Commands:
     Verify:         Get-Command codexstart
     Run:            codexstart
     Debug:          `$env:CLAUDE_DEBUG = "1"; codexstart
-    Shim log:       Get-Content "`$env:LOCALAPPDATA\claude\codex-shim.log" -Tail 20
     Force refresh:  Remove-Item "`$env:LOCALAPPDATA\claude\env-remote.sh"
+
+  If Codex reports "Connection failed: error sending request", it hit the
+  system-trust bug that macOS has. Point it at a CA bundle, e.g. the one Git
+  for Windows ships, and report back so we can automate it:
+    `$env:CODEX_CA_CERTIFICATE = "C:\Program Files\Git\mingw64\etc\ssl\certs\ca-bundle.crt"
 
 "@
