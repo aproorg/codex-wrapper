@@ -34,11 +34,11 @@ function Check-Prerequisites {
         Write-Err "Codex CLI not found on PATH. Install it first: npm install -g @openai/codex"
     }
     if (-not (Have 'op')) {
-        Write-Warn "1Password CLI (op) not found — API key management will not work."
+        Write-Warn "1Password CLI (op) not found - API key management will not work."
         Write-Warn "Install: https://developer.1password.com/docs/cli/get-started/"
     }
     if (-not (Have 'git')) {
-        Write-Warn "git not found — repo detection will fall back to the default attribution"
+        Write-Warn "git not found - repo detection will fall back to the default attribution"
     }
 }
 
@@ -93,7 +93,7 @@ function Install-CodexDir {
             Add-Content -Path $target -Value ($projects -join "`n")
             Write-Ok "Carried over your [projects] trust entries"
         }
-        Write-Warn "Other local customizations live in $target.bak — merge back by hand if needed"
+        Write-Warn "Other local customizations live in $target.bak - merge back by hand if needed"
     } else {
         Fetch-File "config.toml" $target
         Write-Info "Codex will prompt to trust each directory on first run (writes [projects] blocks locally)"
@@ -103,7 +103,7 @@ function Install-CodexDir {
 # ── Main ────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  Codex Wrapper Installer (apro LiteLLM proxy)" -ForegroundColor White
-Write-Host ("  " + ("─" * 45))
+Write-Host ("  " + ("-" * 45))
 Write-Host ""
 
 Check-Prerequisites
